@@ -18,6 +18,16 @@ Codex Switch 会为不同账号保存独立的 `.codex/auth.json` 和 `.codex/co
 - 切换前硬关闭 ChatGPT/Codex 进程组
 - 支持托盘图标、profile 切换、显示/隐藏窗口
 
+## 界面截图
+
+三张 profile：
+
+![Codex Switch 三张 profile](docs/images/codex-switch-ui-3p.png)
+
+四张 profile：
+
+![Codex Switch 四张 profile](docs/images/codex-switch-ui-4p.png)
+
 ## 下载
 
 普通用户建议从 GitHub Releases 下载最新 Windows 安装包：

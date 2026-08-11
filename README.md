@@ -18,6 +18,16 @@ Codex Switch stores separate local copies of your `.codex/auth.json` and `.codex
 - Hard kill ChatGPT/Codex process groups before switching
 - Tray icon with profile switching and show/hide support
 
+## Screenshots
+
+Three profiles:
+
+![Codex Switch with three profiles](docs/images/codex-switch-ui-3p.png)
+
+Four profiles:
+
+![Codex Switch with four profiles](docs/images/codex-switch-ui-4p.png)
+
 ## Download
 
 For normal users, download the latest Windows installer from GitHub Releases:

@@ -14,6 +14,8 @@ var initialUsageRefreshed = false;
 var usageCache = {};
 var baseWindowHeight = 740;
 var statusExtraHeight = 0;
+var mockProfileCount = getMockProfileCount();
+var isMockMode = mockProfileCount > 0;
 
 var els = {
   appShell: document.querySelector(".app-shell"),
@@ -100,6 +102,62 @@ function formatPlan(value) {
   var text = String(value || "-").trim();
   if (!text || text === "-") return "-";
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function getMockProfileCount() {
+  var value = new URLSearchParams(window.location.search).get("mock");
+  if (value !== "3" && value !== "4") return 0;
+  return Number(value);
+}
+
+function buildMockProfiles(count) {
+  var items = [
+    {
+      name: "Mira Chen",
+      email: "mira.chen@northmail.dev",
+      plan: "plus",
+      reset: "2026-08-18 16:28",
+      primaryLeft: 69.0,
+      secondaryLeft: null,
+      active: false,
+      authText: "{\n  \"account\": \"Mira Chen\",\n  \"email\": \"mira.chen@northmail.dev\"\n}",
+      configText: "model = \"gpt-5-codex\"\napproval_policy = \"on-request\"\n"
+    },
+    {
+      name: "Alex Morgan",
+      email: "alex.morgan@orbitmail.dev",
+      plan: "plus",
+      reset: "2026-08-18 13:36",
+      primaryLeft: 15.0,
+      secondaryLeft: null,
+      active: true,
+      authText: "{\n  \"account\": \"Alex Morgan\",\n  \"email\": \"alex.morgan@orbitmail.dev\"\n}",
+      configText: "model = \"gpt-5-codex\"\napproval_policy = \"on-request\"\n"
+    },
+    {
+      name: "Noah Rivera",
+      email: "noah.rivera@starlane.dev",
+      plan: "plus",
+      reset: "2026-08-18 14:19",
+      primaryLeft: 74.0,
+      secondaryLeft: null,
+      active: false,
+      authText: "{\n  \"account\": \"Noah Rivera\",\n  \"email\": \"noah.rivera@starlane.dev\"\n}",
+      configText: "model = \"gpt-5-codex\"\napproval_policy = \"on-request\"\n"
+    },
+    {
+      name: "Iris Walker",
+      email: "iris.walker@bluepost.dev",
+      plan: "team",
+      reset: "2026-08-19 09:12",
+      primaryLeft: 86.0,
+      secondaryLeft: null,
+      active: false,
+      authText: "{\n  \"account\": \"Iris Walker\",\n  \"email\": \"iris.walker@bluepost.dev\"\n}",
+      configText: "model = \"gpt-5-codex\"\napproval_policy = \"on-request\"\n"
+    }
+  ];
+  return items.slice(0, count);
 }
 
 function showConfirmDialog(title, message) {
@@ -345,7 +403,7 @@ function applySnapshot(snapshot, statusText) {
     if (!selectedName && profiles[0]) selectedName = profiles[0].name;
   }
   renderProfiles();
-  updateNativeTray();
+  if (!isMockMode) updateNativeTray();
   if (sideMode === "config" && sideOpen) renderConfig();
   if (statusText) setStatus(statusText);
 }
@@ -372,6 +430,10 @@ function runBackendAction(commandName, args, busyText, doneText) {
 }
 
 function loadProfiles() {
+  if (isMockMode) {
+    applySnapshot({ profiles: buildMockProfiles(mockProfileCount) }, "Mock screenshot mode.");
+    return Promise.resolve();
+  }
   return runBackendAction("list_profiles", {}, "Loading profiles...", "Profiles loaded.");
 }
 
@@ -411,6 +473,7 @@ function refreshOneProfileUsage(profileName) {
 }
 
 function refreshAllProfileUsage(force) {
+  if (isMockMode) return Promise.resolve();
   if (!force && initialUsageRefreshed) return Promise.resolve();
   if (profiles.length === 0) return Promise.resolve();
   initialUsageRefreshed = true;
