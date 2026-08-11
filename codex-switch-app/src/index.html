@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Switch UI Preview</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <div class="window-drag-mask" id="windowDragMask" aria-hidden="true"></div>
+      <div class="window-actions">
+        <button class="window-button" id="minimizeWindowBtn" title="Minimize" aria-label="Minimize">&#8722;</button>
+        <button class="window-button close-window" id="closeWindowBtn" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <section class="workspace">
+        <header class="topbar">
+          <div class="title-strip">
+            <div class="eyebrow">Local profile switcher</div>
+          </div>
+          <div class="title-main">
+            <h1>Codex Switch</h1>
+            <div class="top-actions">
+              <button class="image-action top-icon-action" id="configBtn" title="Config content" aria-label="Config content">
+                <img src="./assets/config.png" alt="" />
+              </button>
+              <button class="image-action top-icon-action" id="moreBtn" title="More" aria-label="More">
+                <img src="./assets/more.png" alt="" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <section class="profiles-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Profiles</h2>
+              <p id="profileHint">Choose an account snapshot to deploy.</p>
+            </div>
+            <div class="section-actions">
+              <button class="image-action" id="refreshBtn" title="Refresh" aria-label="Refresh">
+                <img src="./assets/refresh.png" alt="" />
+              </button>
+              <button class="image-action primary-image-action" id="switchBtn" title="Activate" aria-label="Activate">
+                <img src="./assets/switch.png" alt="" />
+              </button>
+              <button class="image-action" id="loginBtn" title="New profile" aria-label="New profile">
+                <img src="./assets/login-new.png" alt="" />
+              </button>
+              <button class="image-action danger-image-action" id="deleteBtn" title="Delete" aria-label="Delete">
+                <img src="./assets/delete.png" alt="" />
+              </button>
+            </div>
+          </div>
+          <div class="profile-list" id="profileList"></div>
+        </section>
+
+        <footer class="statusbar" id="statusbar">Ready</footer>
+      </section>
+
+      <aside class="side-panel" id="sidePanel" aria-hidden="true">
+        <div class="side-header">
+          <div class="side-title-row">
+            <h2 id="sideTitle">Config</h2>
+            <div class="side-controls" id="sideControls"></div>
+          </div>
+          <button class="close-button" id="closeSideBtn" title="Close" aria-label="Close">
+            <img id="closeSideIcon" src="./assets/close.png" alt="" />
+          </button>
+        </div>
+        <div class="side-body" id="sideBody"></div>
+      </aside>
+
+      <div class="confirm-layer" id="confirmLayer" aria-hidden="true">
+        <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+          <h2 id="confirmTitle">Start New Profile</h2>
+          <p id="confirmMessage">Current auth/config will be backed up, then ChatGPT/Codex will restart for login.</p>
+          <input class="confirm-input" id="confirmInput" type="text" autocomplete="off" hidden />
+          <div class="confirm-actions">
+            <button class="confirm-secondary" id="confirmCancelBtn">Cancel</button>
+            <button class="confirm-primary" id="confirmOkBtn">OK</button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

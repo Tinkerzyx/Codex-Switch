@@ -1,0 +1,15 @@
+codex_switch_data/
+.tmp_codex_space_switcher/
+
+**/node_modules/
+**/target/
+**/dist/
+**/.vite/
+
+*.log
+*.tmp
+*.bak
+*.pdb
+
+.DS_Store
+Thumbs.db
