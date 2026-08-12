@@ -12,6 +12,8 @@ var loginStableSignature = "";
 var loginStableCount = 0;
 var initialUsageRefreshed = false;
 var usageCache = {};
+var usageRefreshTimer = null;
+var usageRefreshRunning = false;
 var baseWindowHeight = 740;
 var statusExtraHeight = 0;
 var mockProfileCount = getMockProfileCount();
@@ -476,6 +478,8 @@ function refreshAllProfileUsage(force) {
   if (isMockMode) return Promise.resolve();
   if (!force && initialUsageRefreshed) return Promise.resolve();
   if (profiles.length === 0) return Promise.resolve();
+  if (usageRefreshRunning) return Promise.resolve();
+  usageRefreshRunning = true;
   initialUsageRefreshed = true;
   setStatus("Refreshing usage for all profiles...");
   var queue = profiles.map(function (profile) {
@@ -485,6 +489,7 @@ function refreshAllProfileUsage(force) {
   return new Promise(function (resolve) {
     function next() {
     if (queue.length === 0) {
+      usageRefreshRunning = false;
       setStatus("All profile usage refreshed.");
       resolve();
       return;
@@ -497,7 +502,17 @@ function refreshAllProfileUsage(force) {
     }
 
     next();
+  }).catch(function (error) {
+    usageRefreshRunning = false;
+    throw error;
   });
+}
+
+function startUsageRefreshTimer() {
+  if (isMockMode || usageRefreshTimer) return;
+  usageRefreshTimer = window.setInterval(function () {
+    refreshAllProfileUsage(true);
+  }, 60 * 1000);
 }
 
 function updateNativeTray() {
@@ -865,5 +880,6 @@ loadProfiles().catch(function (error) {
   setStatus("Profile load failed: " + String(error));
   renderProfiles();
 }).then(function () {
+  startUsageRefreshTimer();
   refreshAllProfileUsage(false);
 });

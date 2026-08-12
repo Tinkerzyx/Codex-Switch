@@ -22,11 +22,11 @@ Codex Switch 会为不同账号保存独立的 `.codex/auth.json` 和 `.codex/co
 
 三张 profile：
 
-![Codex Switch 三张 profile](docs/images/codex-switch-ui-3p.png)
+![Codex Switch 单列（3 卡以下）](docs/images/codex-switch-ui-3p.png)
 
 四张 profile：
 
-![Codex Switch 四张 profile](docs/images/codex-switch-ui-4p.png)
+![Codex Switch 双列 (4 卡及以上)](docs/images/codex-switch-ui-4p.png)
 
 ## 下载
 
