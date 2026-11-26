@@ -2,7 +2,9 @@
 
 English | [中文](README.zh-CN.md)
 
-A lightweight Windows desktop app for switching local Codex / ChatGPT login snapshots.
+A lightweight desktop app for switching local Codex / ChatGPT login snapshots. Windows is the existing supported platform; macOS 14+ is being ported and validated for Apple Silicon and Intel.
+
+See the [app development guide](codex-switch-app/README.md) for shared architecture, synchronized versions, CI, and macOS acceptance checks.
 
 Codex Switch stores separate local copies of your `.codex/auth.json` and `.codex/config.toml`, then lets you quickly switch between them. It is designed for users who regularly move between multiple Codex-capable accounts and want a small local tool rather than a proxy gateway.
 
@@ -33,7 +35,7 @@ Four profiles:
 For normal users, download the latest Windows installer from GitHub Releases:
 
 ```text
-Codex Switch_0.1.0_x64-setup.exe
+Codex Switch_0.2.1_x64-setup.exe
 ```
 
 The portable executable is also available after building:
@@ -118,14 +120,14 @@ npm run tauri dev
 Build the app:
 
 ```powershell
-npm run tauri build
+npm run build
 ```
 
 Build outputs:
 
 ```text
 codex-switch-app/src-tauri/target/release/codex-switch-app.exe
-codex-switch-app/src-tauri/target/release/bundle/nsis/Codex Switch_0.1.0_x64-setup.exe
+codex-switch-app/src-tauri/target/release/bundle/nsis/Codex Switch_0.2.1_x64-setup.exe
 ```
 
 If build fails because the exe is locked, exit Codex Switch from the tray and build again.

@@ -1,0 +1,25 @@
+{
+  "version": "2.0",
+  "envId": "replace-with-your-cloudbase-env-id",
+  "functionRoot": "functions",
+  "functions": [
+    {
+      "name": "csw_client_api",
+      "envVariables": {
+        "CSW_PROFILE_MASTER_KEY": "replace-with-the-same-base64-key-used-by-csw_admin_api"
+      }
+    },
+    { "name": "csw_admin_api" },
+    { "name": "csw_payment_webhook" },
+    {
+      "name": "csw_maintenance",
+      "triggers": [
+        {
+          "name": "csw_allocation_expiry",
+          "type": "timer",
+          "config": "0 */10 * * * * *"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "codex-switch-cloudbase",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "secrets": "node scripts/csw_generate_secrets.js",
+    "set-admin-password": "node scripts/csw_set_admin_password.js",
+    "deploy": "node deploy-functions.js"
+  }
+}

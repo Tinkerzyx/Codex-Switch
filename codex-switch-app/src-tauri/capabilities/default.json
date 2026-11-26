@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop capability for Codex Switch",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "windows": ["main", "floating-bar", "store-window"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }
