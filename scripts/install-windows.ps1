@@ -12,7 +12,7 @@ if ([IO.Path]::GetFileName($installerPath) -notlike "*_${version}_*-setup.exe") 
 $dataPath = if ([string]::IsNullOrWhiteSpace($env:CODEX_SWITCH_DATA_DIR)) { Join-Path $env:LOCALAPPDATA 'Codex Switch' } else { $env:CODEX_SWITCH_DATA_DIR }
 $dataPath = [IO.Path]::GetFullPath($dataPath)
 $backupPath = Join-Path $env:LOCALAPPDATA ("Codex Switch Backups\upgrade-{0}-{1}" -f $version, (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
-$protectedFiles = @('profiles.json', 'settings.json', 'app-settings.json', 'cloudbase_session.json', 'cloudbase.json', 'login-recovery.json', 'switch-recovery.json')
+$protectedFiles = @('profiles.json', 'settings.json', 'app-settings.json', 'cloudbase_session.json', 'cloudbase.json', 'pending-login-recovery.json', 'pending-switch-recovery.json')
 $protectedDirs = @('profiles', 'backups', 'trash', 'web-sessions', 'five-hour-probes', 'codex_switch_data')
 
 function Get-ContentHash([string]$Path) {
@@ -35,14 +35,22 @@ foreach ($name in $protectedFiles) {
 }
 foreach ($name in $protectedDirs) {
     $path = Join-Path $dataPath $name
-    if (Test-Path -LiteralPath $path -PathType Container) { $files += Get-ChildItem -LiteralPath $path -File -Recurse -Force }
+    if (Test-Path -LiteralPath $path -PathType Container) {
+        $entries = Get-ChildItem -LiteralPath $path -File -Recurse -Force
+        if ($name -eq 'web-sessions') {
+            # Cache is disposable; retain cookies, local storage, databases, and
+            # every other session file. Existing caches are left untouched.
+            $entries = $entries | Where-Object { $_.FullName.Substring($path.Length) -notmatch '(?i)(^|\\)(Cache|Code Cache|GPUCache|DawnCache|GrShaderCache|ShaderCache)(\\|$)' }
+        }
+        $files += $entries
+    }
 }
 foreach ($file in $files) {
     $relative = $file.FullName.Substring($dataPath.Length).TrimStart('\')
     $hashes[$relative] = Get-ContentHash $file.FullName
     $destination = Join-Path $backupPath $relative
-    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-    Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
+    [IO.File]::Copy($file.FullName, $destination, $true)
 }
 
 function Restore-ProfileData {
@@ -50,8 +58,8 @@ function Restore-ProfileData {
         $destination = Join-Path $dataPath $relative
         $matches = (Test-Path -LiteralPath $destination -PathType Leaf) -and ((Get-ContentHash $destination) -eq $hashes[$relative])
         if (-not $matches) {
-            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-            Copy-Item -LiteralPath (Join-Path $backupPath $relative) -Destination $destination -Force
+            [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
+            [IO.File]::Copy((Join-Path $backupPath $relative), $destination, $true)
         }
     }
 }
@@ -64,8 +72,22 @@ try {
         $uninstaller = if ($uninstall.Groups[1].Success) { $uninstall.Groups[1].Value } else { $uninstall.Groups[2].Value }
         if (-not $uninstaller -or -not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw 'Registered uninstaller was not found.' }
         $installDirectory = Split-Path -Parent $uninstaller
-        $process = Start-Process -FilePath $uninstaller -ArgumentList "/S _?=$installDirectory" -WindowStyle Hidden -PassThru -Wait
-        if ($process.ExitCode -notin @(0, 3010)) { throw "Silent uninstall failed: $($process.ExitCode)" }
+        $previousBinaries = Join-Path $backupPath 'previous-installation'
+        [IO.Directory]::CreateDirectory($previousBinaries) | Out-Null
+        foreach ($binary in @('codex-switch-app.exe', 'uninstall.exe')) {
+            $binaryPath = Join-Path $installDirectory $binary
+            if (Test-Path -LiteralPath $binaryPath -PathType Leaf) { [IO.File]::Copy($binaryPath, (Join-Path $previousBinaries $binary), $true) }
+        }
+        $process = Start-Process -FilePath $uninstaller -ArgumentList "/S /UPDATE _?=$installDirectory" -WindowStyle Hidden -PassThru -Wait
+        if ($process.ExitCode -notin @(0, 3010)) {
+            # NSIS /UPDATE repairs a damaged old uninstaller without deleting
+            # data. Then use the repaired uninstaller and perform a clean install.
+            Write-Output ("Old uninstaller returned {0}; repairing installation metadata before retrying." -f $process.ExitCode)
+            $repair = Start-Process -FilePath $installerPath -ArgumentList '/S /UPDATE' -WindowStyle Hidden -PassThru -Wait
+            if ($repair.ExitCode -notin @(0, 3010)) { throw "Installer repair failed: $($repair.ExitCode)" }
+            $process = Start-Process -FilePath $uninstaller -ArgumentList "/S /UPDATE _?=$installDirectory" -WindowStyle Hidden -PassThru -Wait
+            if ($process.ExitCode -notin @(0, 3010)) { throw "Repaired silent uninstall failed: $($process.ExitCode)" }
+        }
     }
     $process = Start-Process -FilePath $installerPath -ArgumentList '/S' -WindowStyle Hidden -PassThru -Wait
     if ($process.ExitCode -notin @(0, 3010)) { throw "Silent installation failed: $($process.ExitCode)" }
