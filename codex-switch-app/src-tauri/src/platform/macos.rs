@@ -135,6 +135,16 @@ pub(super) fn cli_command() -> Command {
                 .map(|dir| dir.join("codex"))
                 .find(|path| path.is_file())
         })
+        .or_else(|| {
+            let app = find_app()?;
+            let resources = PathBuf::from(app.target).join("Contents/Resources");
+            [
+                resources.join("codex-cli/CodexCLI.app/Contents/MacOS/codex"),
+                resources.join("codex"),
+            ]
+            .into_iter()
+            .find(|path| path.is_file())
+        })
         .unwrap_or_else(|| PathBuf::from("codex"));
     let mut command = Command::new(executable);
     if let Ok(path) = env::join_paths(search) {
