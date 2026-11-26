@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>__STORE_CSS__</style>
+</head>
+<body>
+  <section class="store-panel-content">
+    <div class="store-plan-grid">
+      <section class="store-plan-card store-plan-select" id="monthlyCard" role="button" tabindex="0" aria-label="Monthly plan">
+        <div class="store-plan-top">
+          <div class="store-plan-title-row"><strong id="monthlyName"></strong><span id="monthlyStock"></span></div>
+          <div class="store-price-row"><b id="monthlyPrice"></b><em id="monthlyUnit"></em></div>
+        </div>
+        <ul class="store-feature-list">
+          <li id="monthlyFeature1"><span>&#10003;</span></li>
+          <li id="monthlyFeature2"><span>&#10003;</span></li>
+        </ul>
+      </section>
+      <section class="store-plan-card store-plan-card-secondary store-plan-select" id="weeklyCard" role="button" tabindex="0" aria-label="Weekly quota plan">
+        <div class="store-plan-top">
+          <div class="store-plan-title-row"><strong id="weeklyName"></strong><span id="weeklyStock"></span></div>
+          <div class="store-price-row"><b id="weeklyPrice"></b><em id="weeklyUnit"></em></div>
+        </div>
+        <ul class="store-feature-list">
+          <li id="weeklyFeature1"><span>&#10003;</span></li>
+          <li id="weeklyFeature2"><span>&#10003;</span></li>
+        </ul>
+      </section>
+    </div>
+    <div class="store-notice" id="storeNoticeBox">
+      <p class="store-notice-text" id="storeNotice"></p>
+      <button class="store-notice-more" id="storeNoticeMore" type="button" aria-controls="storeNotice" aria-expanded="false"></button>
+    </div>
+    <section class="store-checkout-card" aria-label="Checkout">
+      <div class="store-summary">
+        <div class="store-total"><span id="totalDueLabel"></span><b id="totalDueValue"></b></div>
+      </div>
+      <button class="store-pay-button" id="payButton" type="button"></button>
+    </section>
+  </section>
+  <script>
+    const DATA = __STORE_DATA__;
+    const products = Object.fromEntries(DATA.products.map(product => [product.id, product]));
+    const ids = { monthly: "monthly_30d", weekly: "weekly_100_3d" };
+    const copy = {
+      "zh-cn": {
+        monthlyName: "Codex 月度通行证", monthlyUnit: "/ 月",
+        monthlyFeature1: "30天使用权限", monthlyFeature2: "官方全价订阅Plus账号",
+        weeklyName: "Codex单次周额度速蹬", weeklyUnit: "/ 100%周额度",
+        weeklyFeature1: "单次100%额度，有效期7天", weeklyFeature2: "官方全价订阅Plus账号",
+        inStock: "有货", soldOut: "售罄", totalDue: "应付", pay: "继续支付", more: "更多",
+        notice: "注意事项：账号为全价官方订阅后剥离出Codex额度部分。购买账号使用需要US固定IP节点（最好是加利福尼亚州节点），梯子和IP切换问题引起的风控和封号无售后。官方订阅，非日抛、非中转，不可反代。"
+      },
+      en: {
+        monthlyName: "Codex Monthly Pass", monthlyUnit: "/ month",
+        monthlyFeature1: "30-day access", monthlyFeature2: "Official full-price Plus account",
+        weeklyName: "Codex one-time weekly quota boost", weeklyUnit: "/ 100% weekly quota",
+        weeklyFeature1: "One-time 100% quota, valid for 7 days", weeklyFeature2: "Official full-price Plus account",
+        inStock: "In stock", soldOut: "Sold out", totalDue: "Amount due", pay: "Proceed to payment", more: "More",
+        notice: "Notice: Accounts are official full-price subscriptions with the Codex quota portion separated. A fixed US IP node is required when using the purchased account (California is preferred). Risk controls or account bans caused by VPN/IP switching are not covered by after-sales support. Official subscription accounts only: not daily disposable, not proxy-transit, and reverse proxying is not allowed."
+      }
+    };
+    let language = "zh-cn";
+    let selectedId = ids.monthly;
+    function byId(id) { return document.getElementById(id); }
+    function price(product) {
+      if (!product || !Number.isFinite(Number(product.price))) return "—";
+      return "¥" + new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(Number(product.price));
+    }
+    function setFeature(id, value) {
+      const item = byId(id);
+      while (item.childNodes.length > 1) item.removeChild(item.lastChild);
+      item.append(document.createTextNode(value));
+    }
+    function renderCard(key, labels) {
+      const product = products[ids[key]];
+      const available = !!product && Number(product.availableCount) > 0;
+      const card = byId(key + "Card");
+      card.classList.toggle("selected", selectedId === ids[key] && available);
+      card.classList.toggle("unavailable", !available);
+      card.tabIndex = available ? 0 : -1;
+      card.setAttribute("aria-disabled", String(!available));
+      byId(key + "Name").textContent = labels[key + "Name"];
+      byId(key + "Price").textContent = price(product);
+      byId(key + "Unit").textContent = labels[key + "Unit"];
+      const stock = byId(key + "Stock");
+      stock.className = available ? "available" : "unavailable";
+      stock.textContent = available ? labels.inStock + " " + product.availableCount : labels.soldOut;
+      const languageSuffix = language === "zh-cn" ? "Zh" : "En";
+      setFeature(key + "Feature1", product?.["feature1" + languageSuffix] || labels[key + "Feature1"]);
+      setFeature(key + "Feature2", product?.["feature2" + languageSuffix] || labels[key + "Feature2"]);
+    }
+    let lastReportedHeight = 0;
+    let hasRendered = false;
+    function reportHeight(reason) {
+      if (!hasRendered) return false;
+      const height = Math.ceil(document.querySelector(".store-panel-content").getBoundingClientRect().height);
+      if (height === lastReportedHeight) return false;
+      lastReportedHeight = height;
+      window.parent.postMessage({ type: "codex-switch-store-resize", height, reason: reason === "notice" ? "notice" : "content" }, "*");
+      return true;
+    }
+    function render() {
+      const labels = copy[language];
+      if (!products[selectedId] || Number(products[selectedId].availableCount) <= 0) {
+        if (Number(products[ids.monthly]?.availableCount || 0) > 0) selectedId = ids.monthly;
+        else if (Number(products[ids.weekly]?.availableCount || 0) > 0) selectedId = ids.weekly;
+      }
+      renderCard("monthly", labels);
+      renderCard("weekly", labels);
+      byId("storeNotice").textContent = labels.notice;
+      byId("storeNoticeMore").textContent = labels.more;
+      byId("totalDueLabel").textContent = labels.totalDue;
+      const selected = products[selectedId];
+      byId("totalDueValue").textContent = price(selected);
+      const canPay = !!selected && Number(selected.availableCount) > 0;
+      const pay = byId("payButton");
+      pay.disabled = !canPay;
+      pay.textContent = canPay ? labels.pay : labels.soldOut;
+      hasRendered = true;
+      reportHeight();
+    }
+    for (const key of ["monthly", "weekly"]) {
+      const card = byId(key + "Card");
+      function select() {
+        if (Number(products[ids[key]]?.availableCount || 0) <= 0) return;
+        selectedId = ids[key];
+        render();
+      }
+      card.addEventListener("click", select);
+      card.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); }
+      });
+    }
+    byId("payButton").addEventListener("click", () => {
+      if (!byId("payButton").disabled) {
+        window.parent.postMessage({ type: "codex-switch-store-pay", productId: selectedId }, "*");
+      }
+    });
+    const initialRenderTimer = window.setTimeout(render, 300);
+    window.addEventListener("message", event => {
+      if (event.source !== window.parent || !event.data) return;
+      if (event.data.type === "codex-switch-store-language") {
+        window.clearTimeout(initialRenderTimer);
+        if (event.data.noticeExpanded === true) expandNotice(false, false);
+        language = event.data.language === "zh-cn" ? "zh-cn" : "en";
+        render();
+      }
+      if (event.data.type === "codex-switch-store-catalog" && Array.isArray(event.data.products)) {
+        for (const id of Object.keys(products)) delete products[id];
+        for (const product of event.data.products) {
+          if (product && typeof product.id === "string") products[product.id] = product;
+        }
+        render();
+      }
+    });
+    function expandNotice(persist, reportNow = true) {
+      const noticeBox = byId("storeNoticeBox");
+      if (noticeBox.classList.contains("expanded")) return;
+      noticeBox.classList.add("expanded");
+      const button = byId("storeNoticeMore");
+      button.setAttribute("aria-expanded", "true");
+      button.hidden = true;
+      if (reportNow) reportHeight("notice");
+      if (persist) {
+        window.parent.postMessage({ type: "codex-switch-store-notice-expanded" }, "*");
+      }
+    }
+    byId("storeNoticeMore").addEventListener("click", () => expandNotice(true));
+    window.addEventListener("resize", () => requestAnimationFrame(reportHeight));
+    if (typeof ResizeObserver !== "undefined") {
+      const contentResizeObserver = new ResizeObserver(reportHeight);
+      contentResizeObserver.observe(document.querySelector(".store-panel-content"));
+    }
+  </script>
+</body>
+</html>

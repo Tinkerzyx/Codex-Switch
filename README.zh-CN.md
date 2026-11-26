@@ -2,7 +2,9 @@
 
 [English](README.md) | 中文
 
-一个轻量的 Windows 桌面应用，用于切换本地 Codex / ChatGPT 登录快照。
+一个用于切换本地 Codex / ChatGPT 登录快照的轻量桌面应用。Windows 为现有支持平台，macOS 14+ 正在进行双架构移植与验收。
+
+跨平台结构、版本同步、CI 和 macOS 验收说明见 [应用开发说明](codex-switch-app/README.md)。
 
 Codex Switch 会为不同账号保存独立的 `.codex/auth.json` 和 `.codex/config.toml` 本地副本，并在需要时快速恢复。它适合经常在多个 Codex 可用账号之间切换、但不想使用代理网关的用户。
 
@@ -33,7 +35,7 @@ Codex Switch 会为不同账号保存独立的 `.codex/auth.json` 和 `.codex/co
 普通用户建议从 GitHub Releases 下载最新 Windows 安装包：
 
 ```text
-Codex Switch_0.1.0_x64-setup.exe
+Codex Switch_0.2.1_x64-setup.exe
 ```
 
 构建后也可以使用便携版 exe：
@@ -118,14 +120,14 @@ npm run tauri dev
 构建：
 
 ```powershell
-npm run tauri build
+npm run build
 ```
 
 构建产物：
 
 ```text
 codex-switch-app/src-tauri/target/release/codex-switch-app.exe
-codex-switch-app/src-tauri/target/release/bundle/nsis/Codex Switch_0.1.0_x64-setup.exe
+codex-switch-app/src-tauri/target/release/bundle/nsis/Codex Switch_0.2.1_x64-setup.exe
 ```
 
 如果构建失败并提示 exe 被占用，请先从托盘退出 Codex Switch，再重新构建。

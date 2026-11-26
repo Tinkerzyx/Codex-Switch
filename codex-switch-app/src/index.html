@@ -8,21 +8,24 @@
   </head>
   <body>
     <main class="app-shell">
-      <div class="window-drag-mask" id="windowDragMask" aria-hidden="true"></div>
+      <div class="window-drag-mask" id="windowDragMask" data-tauri-drag-region aria-hidden="true"></div>
       <div class="window-actions">
         <button class="window-button" id="minimizeWindowBtn" title="Minimize" aria-label="Minimize">&#8722;</button>
         <button class="window-button close-window" id="closeWindowBtn" title="Close" aria-label="Close">&times;</button>
       </div>
       <section class="workspace">
-        <header class="topbar">
-          <div class="title-strip">
-            <div class="eyebrow">Local profile switcher</div>
+        <header class="topbar" data-tauri-drag-region>
+          <div class="title-strip" data-tauri-drag-region>
+            <div class="eyebrow" data-tauri-drag-region>Local profile switcher</div>
           </div>
-          <div class="title-main">
-            <h1>Codex Switch</h1>
+          <div class="title-main" data-tauri-drag-region>
+            <h1 data-tauri-drag-region>Codex Switch</h1>
             <div class="top-actions">
-              <button class="image-action top-icon-action" id="configBtn" title="Config content" aria-label="Config content">
-                <img src="./assets/config.png" alt="" />
+              <button class="image-action top-icon-action column-toggle-action" id="columnToggleBtn" title="Single column" aria-label="Single column" hidden>
+                <img src="./assets/single-column.png" alt="" />
+              </button>
+              <button class="image-action top-icon-action" id="storeBtn" title="Store" aria-label="Store">
+                <img src="./assets/store.png" alt="" />
               </button>
               <button class="image-action top-icon-action" id="moreBtn" title="More" aria-label="More">
                 <img src="./assets/more.png" alt="" />
@@ -55,7 +58,11 @@
           <div class="profile-list" id="profileList"></div>
         </section>
 
-        <footer class="statusbar" id="statusbar">Ready</footer>
+        <footer class="statusbar" id="statusbar">
+          <span class="reset-status-indicator reset-status-unknown" id="resetStatusIndicator" role="button" tabindex="0" aria-label="Codex reset status: unavailable" title="Codex reset status: unavailable"></span>
+          <span class="status-text" id="statusText"><span class="status-content">Tibo：加载中…</span></span>
+          <button class="status-abort" id="abortLoginWatchBtn" hidden>Abort</button>
+        </footer>
       </section>
 
       <aside class="side-panel" id="sidePanel" aria-hidden="true">
@@ -71,14 +78,59 @@
         <div class="side-body" id="sideBody"></div>
       </aside>
 
+      <section class="admin-inventory-panel" id="adminInventoryPanel" aria-hidden="true">
+        <header class="admin-inventory-panel-header">
+          <div class="admin-inventory-title-row">
+            <h2 id="adminInventoryTitle">Cloud inventory</h2>
+            <button class="admin-inventory-refresh" id="adminInventoryRefreshBtn" data-admin-action="refresh" title="Refresh inventory" aria-label="Refresh inventory">
+              <img src="./assets/refresh.png" alt="" />
+            </button>
+          </div>
+          <div class="admin-inventory-header-actions">
+            <div class="admin-inventory-filter" role="tablist" aria-label="Inventory product filter">
+              <button id="adminFilterWeeklyBtn" data-admin-inventory-filter="weekly" role="tab">Weekly</button>
+              <button id="adminFilterMonthlyBtn" data-admin-inventory-filter="monthly" role="tab">Monthly</button>
+            </div>
+            <span class="admin-inventory-count" id="adminInventoryCount">0</span>
+          </div>
+        </header>
+        <div class="admin-inventory-grid" id="adminInventoryGrid"></div>
+      </section>
+
       <div class="confirm-layer" id="confirmLayer" aria-hidden="true">
         <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
           <h2 id="confirmTitle">Start New Profile</h2>
           <p id="confirmMessage">Current auth/config will be backed up, then ChatGPT/Codex will restart for login.</p>
           <input class="confirm-input" id="confirmInput" type="text" autocomplete="off" hidden />
+          <div class="confirm-choice" id="confirmChoice" hidden>
+            <button data-confirm-choice="weekly">Weekly</button>
+            <button data-confirm-choice="monthly">Monthly</button>
+          </div>
           <div class="confirm-actions">
             <button class="confirm-secondary" id="confirmCancelBtn">Cancel</button>
             <button class="confirm-primary" id="confirmOkBtn">OK</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="payment-layer" id="paymentLayer" aria-hidden="true">
+        <section class="payment-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentTitle">
+          <div class="payment-header">
+            <div>
+              <h2 id="paymentTitle">Scan to pay</h2>
+              <p id="paymentSubtitle"></p>
+            </div>
+            <button class="payment-close" id="paymentCloseBtn" title="Cancel payment" aria-label="Cancel payment">&times;</button>
+          </div>
+          <div class="payment-body" id="paymentBody">
+            <div class="payment-loading">
+              <div class="payment-spinner"></div>
+              <p>Creating order...</p>
+            </div>
+          </div>
+          <div class="payment-actions">
+            <button class="payment-secondary" id="paymentRedeemCodeBtn">我有兑换码</button>
+            <button class="payment-secondary" id="paymentCancelBtn">Cancel</button>
           </div>
         </section>
       </div>
@@ -86,6 +138,8 @@
 
     <div class="toast" id="toast" role="status"></div>
 
+    <script src="./bridge/platform.js"></script>
+    <script src="./auto-five-hour.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

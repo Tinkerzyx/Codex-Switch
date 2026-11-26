@@ -1,6 +1,6 @@
 [package]
 name = "codex-switch-app"
-version = "0.1.0"
+version = "1.7.7"
 description = "Lightweight Codex profile switcher"
 authors = ["Codex Switch"]
 edition = "2021"
@@ -15,4 +15,15 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+chrono = "0.4"
+dirs = "6"
+base64 = "0.22"
+toml = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38.2"
+

@@ -1,0 +1,66 @@
+name: Desktop checks
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-check-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: windows-x86_64
+            bundle: nsis
+          - runner: macos-15
+            target: darwin-aarch64
+            bundle: app,dmg
+          - runner: macos-15-intel
+            target: darwin-x86_64
+            bundle: app,dmg
+    runs-on: ${{ matrix.runner }}
+    env:
+      CODEX_SWITCH_DATA_DIR: ${{ github.workspace }}/.test-output/runtime
+      APPLE_SIGNING_IDENTITY: '-'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: codex-switch-app/package-lock.json
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: codex-switch-app/src-tauri
+          shared-key: ${{ matrix.target }}
+      - run: npm ci
+        working-directory: codex-switch-app
+      - run: node scripts/version.mjs check
+      - run: npm test
+        working-directory: codex-switch-app
+      - run: cargo test --locked --lib --manifest-path codex-switch-app/src-tauri/Cargo.toml
+      - run: npm run build -- --ci --bundles ${{ matrix.bundle }}
+        working-directory: codex-switch-app
+      - name: Archive macOS application preserving permissions
+        if: runner.os == 'macOS'
+        run: tar -czf release-output/Codex-Switch-${{ matrix.target }}.app.tar.gz -C codex-switch-app/src-tauri/target/release/bundle/macos 'Codex Switch.app'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-${{ matrix.target }}
+          if-no-files-found: error
+          path: |
+            codex-switch-app/src-tauri/target/release/bundle/nsis/*-setup.exe
+            codex-switch-app/src-tauri/target/release/bundle/dmg/*.dmg
+            release-output/*

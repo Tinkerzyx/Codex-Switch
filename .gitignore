@@ -1,10 +1,28 @@
 codex_switch_data/
 .tmp_codex_space_switcher/
+.test-output/
+.tmp-*/
+.tmp-*.mjs
+.tmp-*.py
+release-output/
 
 **/node_modules/
 **/target/
 **/dist/
 **/.vite/
+cloudbase/cloudbaserc.json
+cloudbase/.env.local
+**/auth.json
+**/auth.*.json
+**/config.toml
+**/cloudbase.session.json
+**/cloudbase_session.json
+**/.env
+**/.env.*
+!**/.env.example
+*.p12
+*.p8
+*.key
 
 *.log
 *.tmp

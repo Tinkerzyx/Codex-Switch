@@ -1,0 +1,16 @@
+{
+  "description": "Design manifest. Create matching indexes in the CloudBase console.",
+  "indexes": [
+    { "collection": "csw_inventory_profiles", "fields": ["accountHash"], "unique": true },
+    { "collection": "csw_inventory_profiles", "fields": ["status", "eligibleProducts"] },
+    { "collection": "csw_orders", "fields": ["clientOrderId"], "unique": true },
+    { "collection": "csw_orders", "fields": ["tradeNo"], "unique": true, "sparse": true },
+    { "collection": "csw_orders", "fields": ["buyerUid", "createdAt"] },
+    { "collection": "csw_allocations", "fields": ["orderId"], "unique": true },
+    { "collection": "csw_allocations", "fields": ["buyerUid", "status"] },
+    { "collection": "csw_allocations", "fields": ["profileId", "status"] },
+    { "collection": "csw_payment_events", "fields": ["provider", "providerEventId"], "unique": true },
+    { "collection": "csw_admin_sessions", "fields": ["uid", "tokenHash", "revoked"] },
+    { "collection": "csw_rate_limits", "fields": ["key"], "unique": true }
+  ]
+}
