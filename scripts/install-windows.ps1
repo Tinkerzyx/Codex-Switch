@@ -15,6 +15,13 @@ $backupPath = Join-Path $env:LOCALAPPDATA ("Codex Switch Backups\upgrade-{0}-{1}
 $protectedFiles = @('profiles.json', 'settings.json', 'app-settings.json', 'cloudbase_session.json', 'cloudbase.json', 'login-recovery.json', 'switch-recovery.json')
 $protectedDirs = @('profiles', 'backups', 'trash', 'web-sessions', 'five-hour-probes', 'codex_switch_data')
 
+function Get-ContentHash([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '') }
+    finally { $algorithm.Dispose(); $stream.Dispose() }
+}
+
 Get-Process -Name 'codex-switch-app' -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
 
@@ -32,7 +39,7 @@ foreach ($name in $protectedDirs) {
 }
 foreach ($file in $files) {
     $relative = $file.FullName.Substring($dataPath.Length).TrimStart('\')
-    $hashes[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+    $hashes[$relative] = Get-ContentHash $file.FullName
     $destination = Join-Path $backupPath $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
@@ -41,7 +48,7 @@ foreach ($file in $files) {
 function Restore-ProfileData {
     foreach ($relative in $hashes.Keys) {
         $destination = Join-Path $dataPath $relative
-        $matches = (Test-Path -LiteralPath $destination -PathType Leaf) -and ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -eq $hashes[$relative])
+        $matches = (Test-Path -LiteralPath $destination -PathType Leaf) -and ((Get-ContentHash $destination) -eq $hashes[$relative])
         if (-not $matches) {
             New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $backupPath $relative) -Destination $destination -Force
@@ -65,7 +72,7 @@ try {
 } finally { Restore-ProfileData }
 
 foreach ($relative in $hashes.Keys) {
-    if ((Get-FileHash -LiteralPath (Join-Path $dataPath $relative) -Algorithm SHA256).Hash -ne $hashes[$relative]) { throw "Profile verification failed: $relative" }
+    if ((Get-ContentHash (Join-Path $dataPath $relative)) -ne $hashes[$relative]) { throw "Profile verification failed: $relative" }
 }
 $installed = Get-ChildItem -Path $roots -ErrorAction SilentlyContinue | Get-ItemProperty | Where-Object { $_.DisplayName -eq 'Codex Switch' } | Select-Object -First 1
 if (-not $installed -or $installed.DisplayVersion -ne $version) { throw "Installed version could not be verified as $version." }

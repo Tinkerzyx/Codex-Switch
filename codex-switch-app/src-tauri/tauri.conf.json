@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Codex Switch",
-  "version": "1.7.5",
+  "version": "1.7.6",
   "identifier": "com.codexswitch.app",
   "build": {
     "frontendDist": "../src"
   },
   "app": {
+    "macOSPrivateApi": true,
     "withGlobalTauri": true,
     "windows": [
       {
