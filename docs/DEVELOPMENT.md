@@ -66,6 +66,8 @@ CODEX_HOME="$smoke_root/codex-home" "$app_binary"
 
 Windows 首次获取准备分支（分支已推送后）：
 
+本轮可直接按 [Windows 接手步骤](WINDOWS_HANDOFF.md) 操作；其中包含已通过构建的提交号、产物入口和空白数据隔离运行方式。
+
 ```powershell
 git clone --branch codex/cross-platform-foundation https://github.com/Tinkerzyx/Codex-Switch.git
 cd Codex-Switch/codex-switch-app
