@@ -9,7 +9,7 @@ use std::{
 };
 
 pub(super) fn data_dir() -> PathBuf {
-    home_dir().join("Library/Application Support/com.codexswitch.app")
+    home_dir().join("Documents/CodexSwitch")
 }
 
 pub(super) fn find_app() -> Option<AppTarget> {

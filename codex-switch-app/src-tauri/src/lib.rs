@@ -342,7 +342,6 @@ struct SessionInfo {
     email: Option<String>,
     account_id: Option<String>,
     auth_mode: Option<String>,
-    last_refresh: Option<String>,
     access_token: Option<String>,
     subscription_active_until: Option<String>,
 }
@@ -408,6 +407,25 @@ fn now_stamp() -> String {
 
 fn now_text() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+fn normalize_profile_timestamp(raw: &str) -> String {
+    let timestamp = raw
+        .parse::<i64>()
+        .ok()
+        .and_then(|seconds| DateTime::from_timestamp(seconds, 0));
+    timestamp
+        .or_else(|| {
+            DateTime::parse_from_rfc3339(raw)
+                .ok()
+                .map(|date| date.to_utc())
+        })
+        .map(|date| {
+            date.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        })
+        .unwrap_or_else(|| raw.to_string())
 }
 
 fn diagnostics_dir() -> PathBuf {
@@ -626,10 +644,14 @@ fn load_db() -> Result<Db, String> {
     }
     let raw = fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let normalized = raw.trim_start_matches('\u{feff}');
-    let db: Db = serde_json::from_str(normalized)
+    let mut db: Db = serde_json::from_str(normalized)
         .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
     if db.schema_version > storage::SCHEMA_VERSION {
         return Err("Profile data was created by a newer version of Codex Switch. Update the app before continuing.".into());
+    }
+    for profile in db.profiles.values_mut() {
+        profile.created_at = normalize_profile_timestamp(&profile.created_at);
+        profile.updated_at = normalize_profile_timestamp(&profile.updated_at);
     }
     Ok(db)
 }
@@ -1097,7 +1119,6 @@ fn session_from_auth_value(auth: &Value) -> SessionInfo {
         email: value_string(&id_payload, "email"),
         account_id: jwt_account_id.or(token_account_id),
         auth_mode: value_string(&auth, "auth_mode"),
-        last_refresh: value_string(&auth, "last_refresh"),
         access_token: if access_token.is_empty() {
             None
         } else {
@@ -2661,7 +2682,8 @@ fn view_for_profile(meta: &ProfileMeta, active: Option<&String>) -> ProfileView 
             .subscription_active_until
             .clone()
             .or(session.subscription_active_until),
-        reset: session.last_refresh.unwrap_or_else(|| "-".to_string()),
+        // Quota reset comes only from usage; auth refresh is a different event.
+        reset: "-".to_string(),
         updated: meta.updated_at.clone(),
         auth_size: file_size_label(&auth_path),
         config_size: file_size_label(&config_path),
@@ -5534,6 +5556,19 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_timestamps_accept_legacy_epoch_and_preserve_windows_format() {
+        assert_eq!(
+            normalize_profile_timestamp("0"),
+            normalize_profile_timestamp("1970-01-01T00:00:00Z")
+        );
+        assert_eq!(
+            normalize_profile_timestamp("2026-11-26 10:00:00"),
+            "2026-11-26 10:00:00"
+        );
+        assert_eq!(normalize_profile_timestamp("-"), "-");
+    }
 
     #[test]
     fn account_writeback_rejects_desktop_switched_during_usage_query() {

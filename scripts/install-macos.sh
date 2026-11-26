@@ -24,4 +24,4 @@ if ! /bin/mv "$staging/Codex Switch.app" "$target_app"; then
 fi
 /bin/rmdir "$staging"
 /usr/bin/open "$target_app"
-echo 'Installed Codex Switch. Profiles remain in ~/Library/Application Support/com.codexswitch.app.'
+echo 'Installed Codex Switch. Profiles remain in ~/Documents/CodexSwitch.'
