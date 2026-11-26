@@ -39,7 +39,7 @@ Local `npm run build` allocates the next version and synchronizes npm, Cargo, Ta
 
 On Windows the local build then silently uninstalls/reinstalls the app, backs up profile data outside the installation directory, verifies retained files by SHA-256, checks the installed executable version, and starts the app. The profile data location remains `%LOCALAPPDATA%\Codex Switch`.
 
-On macOS, use `bash ../scripts/install-macos.sh '/absolute/path/to/Codex Switch.app'` to replace the app while retaining the previous app for recovery. Profiles stay in `~/Library/Application Support/com.codexswitch.app`. Override either platform's data directory with `CODEX_SWITCH_DATA_DIR`.
+On macOS, use `bash ../scripts/install-macos.sh '/absolute/path/to/Codex Switch.app'` to replace the app while retaining the previous app for recovery. Profiles stay in `~/Documents/CodexSwitch`. Existing data in `~/Library/Application Support/com.codexswitch.app` remains there; this verification build uses the requested Documents store without merging or overwriting the two stores. Override either platform's data directory with `CODEX_SWITCH_DATA_DIR`.
 
 Before running Rust tests, set `CODEX_SWITCH_DATA_DIR` to a disposable directory (CI uses `.test-output/runtime`), then run `cargo test --locked --lib --manifest-path src-tauri/Cargo.toml`.
 

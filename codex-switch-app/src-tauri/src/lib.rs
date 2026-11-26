@@ -342,7 +342,6 @@ struct SessionInfo {
     email: Option<String>,
     account_id: Option<String>,
     auth_mode: Option<String>,
-    last_refresh: Option<String>,
     access_token: Option<String>,
     subscription_active_until: Option<String>,
 }
@@ -408,6 +407,25 @@ fn now_stamp() -> String {
 
 fn now_text() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+fn normalize_profile_timestamp(raw: &str) -> String {
+    let timestamp = raw
+        .parse::<i64>()
+        .ok()
+        .and_then(|seconds| DateTime::from_timestamp(seconds, 0));
+    timestamp
+        .or_else(|| {
+            DateTime::parse_from_rfc3339(raw)
+                .ok()
+                .map(|date| date.to_utc())
+        })
+        .map(|date| {
+            date.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        })
+        .unwrap_or_else(|| raw.to_string())
 }
 
 fn diagnostics_dir() -> PathBuf {
@@ -626,10 +644,14 @@ fn load_db() -> Result<Db, String> {
     }
     let raw = fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let normalized = raw.trim_start_matches('\u{feff}');
-    let db: Db = serde_json::from_str(normalized)
+    let mut db: Db = serde_json::from_str(normalized)
         .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
     if db.schema_version > storage::SCHEMA_VERSION {
         return Err("Profile data was created by a newer version of Codex Switch. Update the app before continuing.".into());
+    }
+    for profile in db.profiles.values_mut() {
+        profile.created_at = normalize_profile_timestamp(&profile.created_at);
+        profile.updated_at = normalize_profile_timestamp(&profile.updated_at);
     }
     Ok(db)
 }
@@ -1097,7 +1119,6 @@ fn session_from_auth_value(auth: &Value) -> SessionInfo {
         email: value_string(&id_payload, "email"),
         account_id: jwt_account_id.or(token_account_id),
         auth_mode: value_string(&auth, "auth_mode"),
-        last_refresh: value_string(&auth, "last_refresh"),
         access_token: if access_token.is_empty() {
             None
         } else {
@@ -1234,6 +1255,9 @@ window.__cswSubscriptionProbe = "";
     var accessToken = String(session && session.accessToken || "");
     var accountId = String(session && session.account && session.account.id || "");
     if (!accessToken || !accountId) throw new Error("The web session has no accessToken or accountId");
+    var sessionReady = true;
+    // Authentication is sufficient to start OAuth; subscription metadata is optional.
+    window.__cswSubscriptionProbe = JSON.stringify({ ok: false, sessionReady: true });
     if (typeof window.__cswShowLoginTransition === "function") window.__cswShowLoginTransition();
     var jwtPayload = decodeJwtPayload(accessToken);
     var authClaims = jwtPayload && jwtPayload["https://api.openai.com/auth"] || {};
@@ -1272,6 +1296,7 @@ window.__cswSubscriptionProbe = "";
     if (!subscriptionResponse.ok) {
       window.__cswSubscriptionProbe = JSON.stringify({
         ok: false,
+        sessionReady: true,
         error: "Subscription request returned HTTP " + subscriptionResponse.status,
         accountId: accountId,
         sessionKeys: Object.keys(session || {}),
@@ -1295,7 +1320,7 @@ window.__cswSubscriptionProbe = "";
       attempts: attempts
     });
   } catch (error) {
-    window.__cswSubscriptionProbe = JSON.stringify({ ok: false, error: String(error) });
+    window.__cswSubscriptionProbe = JSON.stringify({ ok: false, sessionReady: typeof sessionReady !== "undefined" && sessionReady, error: String(error) });
   }
 })();
 "started"
@@ -1575,6 +1600,11 @@ fn probe_web_usage(
     result
 }
 
+fn web_probe_authenticated(value: &Value) -> bool {
+    value.get("sessionReady").and_then(Value::as_bool) == Some(true)
+        || value.get("ok").and_then(Value::as_bool) == Some(true)
+}
+
 fn probe_subscription_in_window_once(
     window: &tauri::WebviewWindow,
 ) -> Result<Option<(Option<String>, Option<String>)>, String> {
@@ -1594,7 +1624,7 @@ fn probe_subscription_in_window_once(
     let Some(value) = parse_eval_json(&raw) else {
         return Ok(None);
     };
-    if value.get("ok").and_then(Value::as_bool) == Some(true) {
+    if web_probe_authenticated(&value) {
         let active_until =
             value_string(&value, "activeUntil").filter(|text| !text.trim().is_empty());
         let plan_type = value_string(&value, "planType").filter(|text| !text.trim().is_empty());
@@ -2661,7 +2691,8 @@ fn view_for_profile(meta: &ProfileMeta, active: Option<&String>) -> ProfileView 
             .subscription_active_until
             .clone()
             .or(session.subscription_active_until),
-        reset: session.last_refresh.unwrap_or_else(|| "-".to_string()),
+        // Quota reset comes only from usage; auth refresh is a different event.
+        reset: "-".to_string(),
         updated: meta.updated_at.clone(),
         auth_size: file_size_label(&auth_path),
         config_size: file_size_label(&config_path),
@@ -5534,6 +5565,28 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optional_subscription_failure_does_not_block_authenticated_login() {
+        assert!(web_probe_authenticated(
+            &serde_json::json!({"ok": false, "sessionReady": true})
+        ));
+        assert!(web_probe_authenticated(&serde_json::json!({"ok": true})));
+        assert!(!web_probe_authenticated(&serde_json::json!({"ok": false})));
+    }
+
+    #[test]
+    fn profile_timestamps_accept_legacy_epoch_and_preserve_windows_format() {
+        assert_eq!(
+            normalize_profile_timestamp("0"),
+            normalize_profile_timestamp("1970-01-01T00:00:00Z")
+        );
+        assert_eq!(
+            normalize_profile_timestamp("2026-11-26 10:00:00"),
+            "2026-11-26 10:00:00"
+        );
+        assert_eq!(normalize_profile_timestamp("-"), "-");
+    }
 
     #[test]
     fn account_writeback_rejects_desktop_switched_during_usage_query() {
