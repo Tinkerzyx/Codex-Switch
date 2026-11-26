@@ -20,7 +20,9 @@
 
 - 35 个前端/发布脚本测试：pass。
 - Rust：26 pass，1 个已有 live X 网络测试按原设计 ignored。
-- 原生应用构建与界面：pending。
+- 原生应用构建、ad-hoc 签名校验、安装与 1.7.8 界面：pass。
+- 真实 usage 刷新：pass，套餐、双周期额度及重置时间正常显示。
+- 读取已有文稿目录档案：pass；源 auth/config 校验和与升级前一致，旧 Application Support 数据完整保留。
 - Windows / Intel Mac 本轮 CI：pending。
 
 ## 用户实机验收
@@ -29,9 +31,9 @@
 
 | 编号 | 操作 | 应看到的结果 | 当前结果 |
 | --- | --- | --- | --- |
-| A1 | 启动并检查版本 | 显示 1.7.8，保留 1.7.7 的完整界面 | pending |
+| A1 | 启动并检查版本 | 显示 1.7.8，保留 1.7.7 的完整界面 | pass |
 | A2 | More → Save Current as New | 自动解析名称，文稿目录新增 auth.json/config.toml 及索引 | pending |
-| A3 | Refresh / 自动刷新 | 套餐、5 小时/7 天额度和重置时间来自后台接口 | pending |
+| A3 | Refresh / 自动刷新 | 套餐、5 小时/7 天额度和重置时间来自后台接口 | pass |
 | A4 | 退出并重开 | 档案仍存在，额度可再次刷新 | pending |
 | B1 | 通过已有新账号入口登录第二个测试账号 | A、B 两份档案分别保留，登录身份正确 | pending |
 | B2 | 激活 A | 先备份，再恢复 A；桌面应用实际账号和额度属于 A | pending |
@@ -44,3 +46,5 @@
 ## 合并条件
 
 自动检查及两个平台的相关构建通过；A、B 实机切换和重启保持通过；失败路径可恢复；保留原有 Windows 行为。之后按 PR #1 与验证版依赖顺序合入 main，当前不自动合并。
+
+本机已安装到 `/Applications/Codex Switch.app`，上一版应用包保留为同目录的 previous 备份。档案与源文件备份保留在 `~/Documents/CodexSwitch/backups/verification-1.7.8-*`。构建源码提交为 `19e3be0`，后续文档记录不改变二进制源码。草稿 PR：https://github.com/Tinkerzyx/Codex-Switch/pull/3 。

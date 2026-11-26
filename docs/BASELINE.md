@@ -26,3 +26,7 @@
 3. 在成熟实现上验证真实 usage API 与卡片展示。已用实际档案只读查询 HTTP 200，响应包含 plan_type、rate_limit.primary_window/secondary_window、used_percent、reset_at。
 4. 核对档案创建/更新时间、认证刷新时间、额度重置时间的语义与格式；兼容前序实现写入的 Unix 秒数字符串。
 5. 保持当前 profile 数据完整，账号切换仍待独立实机验证。
+
+## 1.7.8 验证版进展
+
+基于本基线的 1.7.8 已构建、签名校验、安装并核验界面及真实额度刷新。文稿目录已接入，已有档案可读取；源 auth/config 与旧数据保持完整。详细结果和待验证的 A/B 切换用例见 [验证记录](MACOS-1.7.8-VERIFICATION.md)。当前仍为独立草稿 PR #3，尚未合并 main。
