@@ -2,6 +2,8 @@
 
 English | [中文](README.zh-CN.md)
 
+Windows/macOS development preparation: [workflow and setup](docs/DEVELOPMENT.md), [architecture and porting gaps](docs/ARCHITECTURE.md), [verification baseline](docs/BASELINE.md). The macOS build configuration establishes a shell baseline; account and system integration still need porting and native acceptance.
+
 A lightweight Windows desktop app for switching local Codex / ChatGPT login snapshots.
 
 Codex Switch stores separate local copies of your `.codex/auth.json` and `.codex/config.toml`, then lets you quickly switch between them. It is designed for users who regularly move between multiple Codex-capable accounts and want a small local tool rather than a proxy gateway.

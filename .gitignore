@@ -5,6 +5,8 @@ codex_switch_data/
 **/target/
 **/dist/
 **/.vite/
+codex-switch-app/artifacts/
+codex-switch-app/src-tauri/gen/schemas/
 
 *.log
 *.tmp

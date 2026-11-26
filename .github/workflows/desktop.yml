@@ -1,0 +1,79 @@
+name: Desktop checks
+
+on:
+  push:
+    branches: [main, codex/cross-platform-foundation]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: codex-switch-app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: codex-switch-app/package-lock.json
+      - name: Install Rust
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+      - name: Install locked JavaScript dependencies
+        run: npm ci
+      - name: Check source
+        run: npm run check
+      - name: Run Rust tests
+        run: npm test
+      - name: Build native debug packages
+        run: npm run build:debug
+      - name: Collect macOS packages
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p artifacts
+          tar -czf "artifacts/Codex-Switch-${BUILD_TARGET}-debug-app.tar.gz" -C src-tauri/target/debug/bundle/macos "Codex Switch.app"
+          cp src-tauri/target/debug/bundle/dmg/*.dmg artifacts/
+      - name: Collect Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item src-tauri/target/debug/bundle/nsis/*.exe artifacts/
+      - name: Record source revision
+        shell: bash
+        run: |
+          git rev-parse HEAD > artifacts/COMMIT.txt
+          rustc -vV > artifacts/RUST.txt
+          node --version > artifacts/NODE.txt
+      - name: Upload acceptance packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codex-switch-${{ matrix.target }}-debug
+          path: codex-switch-app/artifacts/
+          if-no-files-found: error
+          retention-days: 14

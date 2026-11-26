@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+Windows/macOS 双平台开发入口：[环境与工作流](docs/DEVELOPMENT.md)、[结构与移植缺口](docs/ARCHITECTURE.md)、[基线检查结果](docs/BASELINE.md)。macOS 当前准备构建和外壳基线；账号与系统集成功能仍需移植并实机验收。
+
 一个轻量的 Windows 桌面应用，用于切换本地 Codex / ChatGPT 登录快照。
 
 Codex Switch 会为不同账号保存独立的 `.codex/auth.json` 和 `.codex/config.toml` 本地副本，并在需要时快速恢复。它适合经常在多个 Codex 可用账号之间切换、但不想使用代理网关的用户。

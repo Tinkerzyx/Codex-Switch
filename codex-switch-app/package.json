@@ -3,10 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
-    "tauri": "tauri",
-    "dev": "tauri dev",
-    "build": "tauri build"
+    "tauri": "node scripts/toolchain.mjs tauri",
+    "dev": "node scripts/toolchain.mjs tauri dev",
+    "build": "node scripts/toolchain.mjs tauri build",
+    "build:debug": "node scripts/toolchain.mjs tauri build --debug --ci -- --locked",
+    "check:frontend": "node --check src/app.js && node --check scripts/toolchain.mjs",
+    "fmt:check": "node scripts/toolchain.mjs cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+    "check:rust": "node scripts/toolchain.mjs cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings",
+    "check": "npm run check:frontend && npm run fmt:check && npm run check:rust",
+    "test": "node scripts/toolchain.mjs cargo test --manifest-path src-tauri/Cargo.toml --locked"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
