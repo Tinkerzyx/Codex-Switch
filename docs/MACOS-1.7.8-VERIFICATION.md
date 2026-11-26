@@ -48,3 +48,18 @@
 自动检查及两个平台的相关构建通过；A、B 实机切换和重启保持通过；失败路径可恢复；保留原有 Windows 行为。之后按 PR #1 与验证版依赖顺序合入 main，当前不自动合并。
 
 本机已安装到 `/Applications/Codex Switch.app`，上一版应用包保留为同目录的 previous 备份。档案与源文件备份保留在 `~/Documents/CodexSwitch/backups/verification-1.7.8-*`。构建源码提交为 `19e3be0`，后续文档记录不改变二进制源码。草稿 PR：https://github.com/Tinkerzyx/Codex-Switch/pull/3 。
+
+## 1.8.0 最终基础功能验收（2026-11-26）
+
+用户已在本机确认提交 `154732d` 对应的 1.8.0：
+
+- 网页登录后正常进入 Codex 授权/工作空间选择，不再卡在遮罩。
+- 选择后正确生成 Profile 卡片，账号信息正确。
+- 两个已有账号均可成功切换。
+- 桌面应用关闭、重启后采用的 Profile 和实际账号正确。
+
+本轮代码的 Windows x64、macOS ARM64、Intel CI 全部成功：[运行记录](https://github.com/Tinkerzyx/Codex-Switch/actions/runs/45883580224)。本地前端 38 pass；Rust 27 pass、1 个既有网络测试 ignored。
+
+本验收覆盖基础账号登录、档案生成和切换重启链路，不将未执行的小功能、异常恢复、支付、自动任务等标记为通过。A2 独立手动保存入口和 B4/B5 完整故障/备份检查仍按原表记录；B1/B2/B3 由本次实机反馈确认为 pass。
+
+用户确认仅个人使用，基础功能已满足 Mac 使用需求，并明确授权合并当前代码。按 PR #1 → PR #3 的依赖顺序合入 main；后续问题通过独立修复分支、验证后再合并。本次仅合并与记录验收，不重新编译、不提升 1.8.0、不发布 Release、不改动账号数据。
