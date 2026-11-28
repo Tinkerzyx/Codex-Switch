@@ -25,6 +25,21 @@ function Get-ContentHash([string]$Path) {
 Get-Process -Name 'codex-switch-app' -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
 
+# Run the newly built maintenance code before snapshotting retained profile data.
+# The app enforces the single-instance lock and preserves referenced login stores.
+$maintenanceExecutable = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $installerPath))) 'codex-switch-app.exe'
+if (-not (Test-Path -LiteralPath $maintenanceExecutable -PathType Leaf) -or
+    (Get-Item -LiteralPath $maintenanceExecutable).VersionInfo.ProductVersion -notlike "$version*") {
+    throw 'The matching release executable was not found for web session maintenance.'
+}
+Start-Sleep -Seconds 2
+$maintenance = Start-Process -FilePath $maintenanceExecutable -ArgumentList '--cleanup-web-sessions' -WindowStyle Hidden -PassThru -Wait
+if ($maintenance.ExitCode -ne 0) { throw "Web session maintenance failed: $($maintenance.ExitCode). Installation was not changed." }
+$cleanupReport = Get-Content -LiteralPath (Join-Path $dataPath 'diagnostics\web-session-cleanup.json') -Raw | ConvertFrom-Json
+Write-Output ("Web sessions: removed {0} unused sessions and {1} cache directories; reclaimed {2:N2} MB; {3} entries deferred." -f
+    $cleanupReport.report.removedSessions, $cleanupReport.report.removedCacheDirectories,
+    ($cleanupReport.report.freedBytes / 1MB), $cleanupReport.report.failedEntries)
+
 # Keep profile data outside the installation directory during uninstall, even when
 # an older installer placed the application and its data in the same directory.
 $hashes = @{}

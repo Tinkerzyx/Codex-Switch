@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     env, fs,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
@@ -59,6 +59,7 @@ const TIBO_TIMELINE_URLS: [&str; 4] = [
 const TIBO_NITTER_URL: &str = "https://x.noodl3.net/thsottiaux";
 static DIAGNOSTIC_LOG_LOCK: Mutex<()> = Mutex::new(());
 static APP_SETTINGS_LOCK: Mutex<()> = Mutex::new(());
+static WEB_SESSION_CLEANUP_LOCK: Mutex<()> = Mutex::new(());
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -1306,6 +1307,7 @@ fn probe_web_subscription(
     app: &tauri::AppHandle,
     web_session_id: &str,
 ) -> Result<(Option<String>, Option<String>), String> {
+    let session_lease = platform::web_session_cleanup::acquire(web_session_id)?;
     let label = format!("subscription-probe-{}", Uuid::new_v4().simple());
     let url = tauri::Url::parse("https://chatgpt.com/").map_err(|error| error.to_string())?;
     let session_dir = locate_data_dir().join("web-sessions").join(web_session_id);
@@ -1323,6 +1325,7 @@ fn probe_web_subscription(
         .visible(false)
         .build()
         .map_err(|error| format!("Failed to create the subscription probe: {error}"))?;
+    session_lease.attach(&window);
     let _ = window.hide();
 
     thread::sleep(Duration::from_millis(2200));
@@ -1509,6 +1512,7 @@ fn probe_web_usage(
     web_session_id: &str,
     expires_at: Option<String>,
 ) -> Result<ProfileUsage, String> {
+    let session_lease = platform::web_session_cleanup::acquire(web_session_id)?;
     let label = format!("usage-probe-{}", Uuid::new_v4().simple());
     let url = tauri::Url::parse("https://chatgpt.com/").map_err(|error| error.to_string())?;
     let session_dir = locate_data_dir().join("web-sessions").join(web_session_id);
@@ -1526,6 +1530,7 @@ fn probe_web_usage(
         .visible(false)
         .build()
         .map_err(|error| format!("Failed to create the usage probe: {error}"))?;
+    session_lease.attach(&window);
     let _ = window.hide();
     thread::sleep(Duration::from_millis(2200));
     window
@@ -3239,6 +3244,7 @@ fn open_managed_login_window(
     }
     let url = tauri::Url::parse(auth_url)
         .map_err(|error| format!("Codex returned an invalid login URL: {error}"))?;
+    let session_lease = platform::web_session_cleanup::acquire(run_id)?;
     let session_dir = locate_data_dir().join("web-sessions").join(run_id);
     fs::create_dir_all(&session_dir).map_err(|error| error.to_string())?;
     let page_run_id = run_id.to_string();
@@ -3276,6 +3282,7 @@ fn open_managed_login_window(
         })
         .build()
         .map_err(|error| format!("Failed to create the managed login window: {error}"))?;
+    session_lease.attach(&window);
 
     let close_run_id = run_id.to_string();
     let close_app = app.clone();
@@ -3343,10 +3350,73 @@ fn prepare_current_for_new_login(run_id: &str) -> Result<String, String> {
     Ok(format!("{stop_message} {saved_message} {backup_message}"))
 }
 
-fn remove_login_web_session_later(run_id: String) {
+fn cleanup_web_sessions(app: Option<&tauri::AppHandle>) -> Result<(), String> {
+    let _maintenance = WEB_SESSION_CLEANUP_LOCK
+        .lock()
+        .map_err(|_| "Web session maintenance lock unavailable.")?;
+    let root = locate_data_dir();
+    let report = platform::web_session_cleanup::cleanup(&root.join("web-sessions"), || {
+        // Fail closed. A missing or corrupt index must never mean "no references".
+        let raw = fs::read_to_string(db_path()).map_err(|error| error.to_string())?;
+        let db: Db = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
+            .map_err(|error| error.to_string())?;
+        if db.schema_version > storage::SCHEMA_VERSION {
+            return Err("Unknown profile schema; web session cleanup skipped.".into());
+        }
+        let retained: BTreeSet<String> = db
+            .profiles
+            .values()
+            .filter_map(|meta| meta.web_session_id.clone())
+            .collect();
+        let mut protected = BTreeSet::new();
+        match fs::read_to_string(login_recovery_path()) {
+            Ok(raw) => {
+                let recovery: LoginRecoveryRecord =
+                    serde_json::from_str(raw.trim_start_matches('\u{feff}'))
+                        .map_err(|error| error.to_string())?;
+                protected.insert(recovery.run_id);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+        if let Some(app) = app {
+            let state = app.state::<RuntimeState>();
+            let login = state
+                .managed_login
+                .lock()
+                .map_err(|_| "Managed login state unavailable; cleanup skipped.")?;
+            if !login.profile_saved && !login.rollback_started {
+                if let Some(id) = login.run_id.as_ref() {
+                    protected.insert(id.clone());
+                }
+            }
+        }
+        Ok((retained, protected))
+    })?;
+    let value = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "checkedAt": Utc::now().to_rfc3339(),
+        "report": report,
+    });
+    fs::create_dir_all(diagnostics_dir()).map_err(|error| error.to_string())?;
+    fs::write(
+        diagnostics_dir().join("web-session-cleanup.json"),
+        serde_json::to_vec_pretty(&value).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    append_diagnostic_log(&format!("web session cleanup: {value}"));
+    Ok(())
+}
+
+fn schedule_web_session_cleanup(app: tauri::AppHandle) {
     thread::spawn(move || {
-        thread::sleep(Duration::from_millis(600));
-        let _ = fs::remove_dir_all(locate_data_dir().join("web-sessions").join(run_id));
+        // WebView2 may keep files open after Destroyed; leave a release grace and retry.
+        for seconds in [2, 10, 60, 120] {
+            thread::sleep(Duration::from_secs(seconds));
+            if let Err(error) = cleanup_web_sessions(Some(&app)) {
+                append_diagnostic_log(&format!("web session cleanup deferred: {error}"));
+            }
+        }
     });
 }
 
@@ -3432,7 +3502,7 @@ fn cancel_managed_login(
             login.web_session_finished = true;
         }
     }
-    remove_login_web_session_later(run_id.to_string());
+    schedule_web_session_cleanup(app.clone());
     Ok(final_message)
 }
 
@@ -5025,6 +5095,7 @@ fn save_current_as_new(
 
 #[tauri::command]
 fn delete_profile(
+    app: tauri::AppHandle,
     state: State<'_, RuntimeState>,
     profile_name: String,
 ) -> Result<AppSnapshot, String> {
@@ -5076,6 +5147,7 @@ fn delete_profile(
         db.active = None;
     }
     save_db(&db)?;
+    schedule_web_session_cleanup(app);
     app_snapshot(Some(state))
 }
 
@@ -5358,10 +5430,25 @@ pub fn run() {
     install_panic_reporter();
     configure_native_crash_dumps();
     append_diagnostic_log("application starting");
+    let cleanup_only = env::args().any(|arg| arg == "--cleanup-web-sessions");
     let Some(instance_listener) = acquire_instance_listener() else {
+        if cleanup_only {
+            // Maintenance must never run beside another instance's live browsers.
+            std::process::exit(2);
+        }
         append_diagnostic_log("secondary instance handed off to the running instance");
         return;
     };
+
+    if let Err(error) = cleanup_web_sessions(None) {
+        append_diagnostic_log(&format!("startup web session cleanup skipped: {error}"));
+        if cleanup_only {
+            std::process::exit(1);
+        }
+    }
+    if cleanup_only {
+        return;
+    }
 
     let run_result = tauri::Builder::default()
         .manage(RuntimeState {
@@ -5374,8 +5461,8 @@ pub fn run() {
         })
         .setup(move |app| {
             match restore_pending_login_recovery() {
-                Ok(Some(record)) => {
-                    remove_login_web_session_later(record.run_id);
+                Ok(Some(_record)) => {
+                    schedule_web_session_cleanup(app.handle().clone());
                     let runtime = app.state::<RuntimeState>();
                     if let Err(error) = start_codex_app(&runtime) {
                         eprintln!(
@@ -5405,6 +5492,15 @@ pub fn run() {
             }
             start_instance_wake_listener(app.handle().clone(), instance_listener);
             start_floating_bar_watchdog(app.handle().clone());
+            let maintenance_app = app.handle().clone();
+            thread::spawn(move || loop {
+                thread::sleep(Duration::from_secs(6 * 60 * 60));
+                if let Err(error) = cleanup_web_sessions(Some(&maintenance_app)) {
+                    append_diagnostic_log(&format!(
+                        "periodic web session cleanup skipped: {error}"
+                    ));
+                }
+            });
             let menu = build_tray_menu(app.handle(), &[])?;
             TrayIconBuilder::with_id(TRAY_ID)
                 .tooltip("Codex Switch")

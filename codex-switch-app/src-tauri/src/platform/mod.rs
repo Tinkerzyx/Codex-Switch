@@ -9,6 +9,7 @@ pub mod floating;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod web_session;
+pub(crate) mod web_session_cleanup;
 #[cfg(windows)]
 mod windows;
 
