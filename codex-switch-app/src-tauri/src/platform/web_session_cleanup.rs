@@ -1,4 +1,7 @@
-//! Windows WebView2 housekeeping. Credential stores are never cache candidates.
+//! Shared session lifecycle with native Windows and macOS cache backends.
+#[cfg(target_os = "macos")]
+#[path = "macos_web_session_cleanup.rs"]
+mod macos;
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -10,6 +13,7 @@ use std::{
 
 static SESSIONS: Mutex<BTreeMap<String, Usage>> = Mutex::new(BTreeMap::new());
 const RELEASE_GRACE: Duration = Duration::from_secs(60);
+#[cfg(not(target_os = "macos"))]
 const CACHE_PATHS: &[&str] = &[
     "EBWebView/Default/Cache",
     "EBWebView/Default/Code Cache",
@@ -28,7 +32,18 @@ const CACHE_PATHS: &[&str] = &[
 
 struct Usage {
     windows: usize,
-    released: Instant,
+    released: Option<Instant>,
+    maintaining: bool,
+}
+
+impl Usage {
+    fn busy(&self) -> bool {
+        self.windows > 0
+            || self.maintaining
+            || self
+                .released
+                .is_some_and(|released| released.elapsed() < RELEASE_GRACE)
+    }
 }
 
 pub(crate) struct SessionLease(String);
@@ -42,8 +57,12 @@ pub(crate) fn acquire(id: &str) -> Result<SessionLease, String> {
         .map_err(|_| "Web session lock unavailable.")?;
     let usage = sessions.entry(id.to_ascii_lowercase()).or_insert(Usage {
         windows: 0,
-        released: Instant::now(),
+        released: None,
+        maintaining: false,
     });
+    if usage.maintaining {
+        return Err("The web session is being maintained. Please retry shortly.".into());
+    }
     usage.windows += 1;
     Ok(SessionLease(id.to_ascii_lowercase()))
 }
@@ -66,7 +85,35 @@ impl Drop for SessionLease {
         if let Ok(mut sessions) = SESSIONS.lock() {
             if let Some(usage) = sessions.get_mut(&self.0) {
                 usage.windows = usage.windows.saturating_sub(1);
-                usage.released = Instant::now();
+                usage.released = Some(Instant::now());
+            }
+        }
+    }
+}
+
+struct MaintenanceLease(String);
+
+fn reserve_maintenance(id: &str) -> Result<Option<MaintenanceLease>, String> {
+    let mut sessions = SESSIONS
+        .lock()
+        .map_err(|_| "Web session lock unavailable.")?;
+    let usage = sessions.entry(id.to_string()).or_insert(Usage {
+        windows: 0,
+        released: None,
+        maintaining: false,
+    });
+    if usage.busy() {
+        return Ok(None);
+    }
+    usage.maintaining = true;
+    Ok(Some(MaintenanceLease(id.to_string())))
+}
+
+impl Drop for MaintenanceLease {
+    fn drop(&mut self) {
+        if let Ok(mut sessions) = SESSIONS.lock() {
+            if let Some(usage) = sessions.get_mut(&self.0) {
+                usage.maintaining = false;
             }
         }
     }
@@ -86,6 +133,7 @@ pub(crate) struct CleanupReport {
     pub skipped_busy_sessions: usize,
     pub skipped_unsafe_entries: usize,
     pub failed_entries: usize,
+    pub cleared_webkit_caches: usize,
 }
 
 fn linked(metadata: &fs::Metadata) -> bool {
@@ -170,17 +218,20 @@ fn remove_tree(path: &Path, report: &mut CleanupReport) -> bool {
 
 /// Reference lookup happens under the same lock used to reserve new browser windows.
 pub(crate) fn cleanup(
+    app: Option<&tauri::AppHandle>,
     root: &Path,
     references: impl FnOnce() -> Result<(BTreeSet<String>, BTreeSet<String>), String>,
 ) -> Result<CleanupReport, String> {
-    let mut sessions = SESSIONS
+    let sessions = SESSIONS
         .lock()
         .map_err(|_| "Web session lock unavailable.")?;
     let mut report = CleanupReport::default();
-    // WKWebView stores live elsewhere; this Windows policy must not erase Mac markers.
-    if !cfg!(windows) {
-        return Ok(report);
+    #[cfg(target_os = "macos")]
+    if app.is_none() {
+        return Err("WebKit maintenance requires a running app event loop.".into());
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
     let metadata = match fs::symlink_metadata(root) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(report),
@@ -190,6 +241,8 @@ pub(crate) fn cleanup(
         return Err("Web session root is linked or is not a directory; cleanup skipped.".into());
     }
     let (retained, protected) = references()?;
+    // Never hold this lock while waiting for a main-thread WebKit completion.
+    drop(sessions);
     let retained: BTreeSet<_> = retained
         .into_iter()
         .map(|id| id.to_ascii_lowercase())
@@ -206,11 +259,7 @@ pub(crate) fn cleanup(
             report.skipped_unsafe_entries += 1;
             continue;
         }
-        if protected.contains(&id)
-            || sessions
-                .get(&id)
-                .is_some_and(|usage| usage.windows > 0 || usage.released.elapsed() < RELEASE_GRACE)
-        {
+        if protected.contains(&id) {
             report.skipped_busy_sessions += 1;
             continue;
         }
@@ -222,26 +271,72 @@ pub(crate) fn cleanup(
                 continue;
             }
         };
-        if !retained.contains(&id) {
-            if remove_tree(&path, &mut report) {
-                report.removed_sessions += 1;
-            }
-        } else {
-            for cache in CACHE_PATHS {
-                match safe_directory(&path, Path::new(cache)) {
-                    Ok(Some(cache)) => {
-                        if remove_tree(&cache, &mut report) {
-                            report.removed_cache_directories += 1;
-                        }
+        let Some(maintenance) = reserve_maintenance(&id)? else {
+            report.skipped_busy_sessions += 1;
+            continue;
+        };
+        #[cfg(target_os = "macos")]
+        {
+            let retained = retained.contains(&id);
+            match macos::clean(app.unwrap(), &id, !retained, maintenance) {
+                Ok(()) if retained => report.cleared_webkit_caches += 1,
+                Ok(()) => {
+                    // Keep the marker if native removal fails, so the next sweep can retry.
+                    if remove_tree(&path, &mut report) {
+                        report.removed_sessions += 1;
                     }
-                    Ok(None) => {}
-                    Err(_) => report.skipped_unsafe_entries += 1,
+                }
+                Err(_) => report.failed_entries += 1,
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _maintenance = maintenance;
+            if !retained.contains(&id) {
+                if remove_tree(&path, &mut report) {
+                    report.removed_sessions += 1;
+                }
+            } else {
+                for cache in CACHE_PATHS {
+                    match safe_directory(&path, Path::new(cache)) {
+                        Ok(Some(cache)) => {
+                            if remove_tree(&cache, &mut report) {
+                                report.removed_cache_directories += 1;
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(_) => report.skipped_unsafe_entries += 1,
+                    }
                 }
             }
         }
     }
-    sessions.retain(|_, usage| usage.windows > 0 || usage.released.elapsed() < RELEASE_GRACE);
+    SESSIONS
+        .lock()
+        .map_err(|_| "Web session lock unavailable.")?
+        .retain(|_, usage| usage.busy());
     Ok(report)
+}
+
+#[cfg(test)]
+mod lease_tests {
+    use super::*;
+
+    #[test]
+    fn native_maintenance_excludes_new_windows_until_completion() {
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        let reservation = reserve_maintenance(&id).unwrap().unwrap();
+        assert!(acquire(&id).is_err());
+        assert!(reserve_maintenance(&id).unwrap().is_none());
+        drop(reservation);
+        let window = acquire(&id).unwrap();
+        assert!(reserve_maintenance(&id).unwrap().is_none());
+        drop(window);
+        assert!(reserve_maintenance(&id).unwrap().is_none());
+        SESSIONS.lock().unwrap().get_mut(&id).unwrap().released =
+            Some(Instant::now() - RELEASE_GRACE);
+        assert!(reserve_maintenance(&id).unwrap().is_some());
+    }
 }
 
 #[cfg(all(test, windows))]
@@ -286,7 +381,7 @@ mod tests {
         f.write(&format!("{keep}/EBWebView/GrShaderCache/data"));
         f.write(&format!("{orphan}/EBWebView/Default/Network/Cookies"));
         f.write("unexpected/data");
-        let report = cleanup(&f.0, || Ok(([keep.clone()].into(), BTreeSet::new()))).unwrap();
+        let report = cleanup(None, &f.0, || Ok(([keep.clone()].into(), BTreeSet::new()))).unwrap();
         assert_eq!(report.removed_sessions, 1);
         assert_eq!(report.removed_cache_directories, 2);
         assert_eq!(report.failed_entries, 0);
@@ -327,9 +422,19 @@ mod tests {
         f.write(&format!("{active}/data"));
         let lease = acquire(&active).unwrap();
         let references = || Ok((BTreeSet::new(), [pending.clone()].into()));
-        assert_eq!(cleanup(&f.0, references).unwrap().skipped_busy_sessions, 2);
+        assert_eq!(
+            cleanup(None, &f.0, references)
+                .unwrap()
+                .skipped_busy_sessions,
+            2
+        );
         drop(lease);
-        assert_eq!(cleanup(&f.0, references).unwrap().skipped_busy_sessions, 2);
+        assert_eq!(
+            cleanup(None, &f.0, references)
+                .unwrap()
+                .skipped_busy_sessions,
+            2
+        );
         assert!(f.0.join(active).exists());
         assert!(f.0.join(pending).exists());
     }
@@ -339,7 +444,7 @@ mod tests {
         let f = Fixture::new();
         let id = "e".repeat(32);
         f.write(&format!("{id}/data"));
-        assert!(cleanup(&f.0, || Err("invalid profiles.json".into())).is_err());
+        assert!(cleanup(None, &f.0, || Err("invalid profiles.json".into())).is_err());
         assert!(f.0.join(id).exists());
         assert!(acquire("../outside").is_err());
     }
@@ -356,11 +461,11 @@ mod tests {
             .open(f.0.join(format!("{id}/data")))
             .unwrap();
         let references = || Ok((BTreeSet::new(), BTreeSet::new()));
-        let report = cleanup(&f.0, references).unwrap();
+        let report = cleanup(None, &f.0, references).unwrap();
         assert_eq!(report.failed_entries, 1);
         assert_eq!(report.removed_sessions, 0);
         drop(file);
-        assert_eq!(cleanup(&f.0, references).unwrap().removed_sessions, 1);
+        assert_eq!(cleanup(None, &f.0, references).unwrap().removed_sessions, 1);
         assert!(!f.0.join(id).exists());
     }
 
@@ -379,7 +484,7 @@ mod tests {
             .unwrap();
         assert!(status.success());
         assert_eq!(
-            cleanup(&f.0, || Ok((BTreeSet::new(), BTreeSet::new())))
+            cleanup(None, &f.0, || Ok((BTreeSet::new(), BTreeSet::new())))
                 .unwrap()
                 .skipped_unsafe_entries,
             1
@@ -398,7 +503,7 @@ mod tests {
             .unwrap();
         assert!(status.success());
         assert_eq!(
-            cleanup(&f.0, || Ok(([id].into(), BTreeSet::new())))
+            cleanup(None, &f.0, || Ok(([id].into(), BTreeSet::new())))
                 .unwrap()
                 .skipped_unsafe_entries,
             1

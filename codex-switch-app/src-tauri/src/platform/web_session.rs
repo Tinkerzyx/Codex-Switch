@@ -18,15 +18,33 @@ pub(crate) fn isolated<'a, R: Runtime, M: Manager<R>>(
 ) -> WebviewWindowBuilder<'a, R, M> {
     #[cfg(target_os = "macos")]
     {
-        use sha2::{Digest, Sha256};
         let key = directory.file_name().unwrap_or_default().to_string_lossy();
-        let digest = Sha256::digest(format!("com.codexswitch.app.web-session:{key}").as_bytes());
-        let mut identifier = [0; 16];
-        identifier.copy_from_slice(&digest[..16]);
-        builder.data_store_identifier(identifier)
+        builder.data_store_identifier(store_identifier(&key))
     }
     #[cfg(not(target_os = "macos"))]
     {
         builder.data_directory(directory)
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn store_identifier(key: &str) -> [u8; 16] {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("com.codexswitch.app.web-session:{key}").as_bytes());
+    let mut identifier = [0; 16];
+    identifier.copy_from_slice(&digest[..16]);
+    identifier
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn store_identifiers_keep_the_existing_mac_login_mapping() {
+        // Pin the pre-maintenance algorithm: changing this would log every Mac profile out.
+        assert_eq!(
+            super::store_identifier("0123456789abcdef0123456789abcdef"),
+            [211, 198, 2, 116, 68, 163, 112, 0, 236, 39, 98, 237, 181, 56, 229, 135]
+        );
+        assert_ne!(super::store_identifier("a"), super::store_identifier("b"));
     }
 }

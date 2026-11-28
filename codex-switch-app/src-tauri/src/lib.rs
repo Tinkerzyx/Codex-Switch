@@ -1354,11 +1354,10 @@ fn probe_web_subscription(
     let _ = window.hide();
 
     thread::sleep(Duration::from_millis(2200));
-    window
-        .eval(web_subscription_probe_script())
-        .map_err(|error| format!("Failed to start the subscription probe: {error}"))?;
-
     let result = (|| -> Result<(Option<String>, Option<String>), String> {
+        window
+            .eval(web_subscription_probe_script())
+            .map_err(|error| format!("Failed to start the subscription probe: {error}"))?;
         for _ in 0..16 {
             thread::sleep(Duration::from_millis(500));
             let (tx, rx) = mpsc::channel();
@@ -1558,11 +1557,10 @@ fn probe_web_usage(
     session_lease.attach(&window);
     let _ = window.hide();
     thread::sleep(Duration::from_millis(2200));
-    window
-        .eval(web_usage_probe_script())
-        .map_err(|error| format!("Failed to start the usage probe: {error}"))?;
-
     let result = (|| -> Result<ProfileUsage, String> {
+        window
+            .eval(web_usage_probe_script())
+            .map_err(|error| format!("Failed to start the usage probe: {error}"))?;
         for _ in 0..16 {
             thread::sleep(Duration::from_millis(500));
             let (tx, rx) = mpsc::channel();
@@ -3382,11 +3380,15 @@ fn prepare_current_for_new_login(run_id: &str) -> Result<String, String> {
 }
 
 fn cleanup_web_sessions(app: Option<&tauri::AppHandle>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    if app.is_none() {
+        return Ok(());
+    }
     let _maintenance = WEB_SESSION_CLEANUP_LOCK
         .lock()
         .map_err(|_| "Web session maintenance lock unavailable.")?;
     let root = locate_data_dir();
-    let report = platform::web_session_cleanup::cleanup(&root.join("web-sessions"), || {
+    let report = platform::web_session_cleanup::cleanup(app, &root.join("web-sessions"), || {
         // Fail closed. A missing or corrupt index must never mean "no references".
         let raw = fs::read_to_string(db_path()).map_err(|error| error.to_string())?;
         let db: Db = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
@@ -5525,12 +5527,15 @@ pub fn run() {
             start_floating_bar_watchdog(app.handle().clone());
             let maintenance_app = app.handle().clone();
             thread::spawn(move || loop {
+                #[cfg(not(target_os = "macos"))]
                 thread::sleep(Duration::from_secs(6 * 60 * 60));
                 if let Err(error) = cleanup_web_sessions(Some(&maintenance_app)) {
                     append_diagnostic_log(&format!(
                         "periodic web session cleanup skipped: {error}"
                     ));
                 }
+                #[cfg(target_os = "macos")]
+                thread::sleep(Duration::from_secs(6 * 60 * 60));
             });
             let menu = build_tray_menu(app.handle(), &[])?;
             TrayIconBuilder::with_id(TRAY_ID)
