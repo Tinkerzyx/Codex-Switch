@@ -45,3 +45,16 @@ Mac 端验收（本次 Windows 开发环境无法代做，提交到 PR 后由 Ma
 2026-11-28 Windows 1.7.8 清理实测：回收 22 个无引用会话、31 个缓存目录，释放 1,390,039,780 字节；清理前后 823 个需保留文件的 SHA-256 一致，升级保留文件校验通过。此记录仅证明 Windows 路径，不表示 Mac 原生路径已完成实机验收。
 
 接口依据：[Apple 原生 store 删除](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/remove(foridentifier:completionhandler:))、[Apple 按类型清理数据](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/removedata(oftypes:modifiedsince:completionhandler:))。
+
+## 2026-11-28 Mac 端执行记录
+
+基于 PR #4 源码 `91cc987`。下载三平台已通过 CI 的 Apple Silicon 1.8.1 包；产物 commit e3969e8 是 main 与 PR #4 的测试合并提交，Git tree 与 PR 源码一致。应用 ad-hoc 签名校验通过，已安装并原生打开 `/Applications/Codex Switch.app`，保留上一版应用。此次使用既有 CI 包，未重新编译或分配新版本。
+
+- 本机前端/版本脚本：38 pass。
+- 本机 Mac Rust：29 pass，1 个既有 live 网络测试 ignored。
+- 启动后的原生维护报告：clearedWebkitCaches=1，failedEntries=0，removedSessions=0。freedBytes=0 按接口限制不表示未释放缓存。
+- 维护前后记录的 4 个 profile/会话标记文件 SHA-256 一致；16 个原生 Cookies/LocalStorage/IndexedDB 相关文件 SHA-256 一致。
+- 原生界面版本 1.8.1，两个已有 profile 均显示正常套餐、双周期额度和重置时间，并观察到额度更新。
+- 数据备份保留于本机 Documents 下 `CodexSwitch-backup-before-1.8.1-*`，认证数据未提交。
+
+仍待用户配合执行：清理后的双账号实际切换、已有网页登录会话免登录复用、删除测试 profile 的 native store 回收、取消登录/中断恢复及原生失败重试。当前任务已完成拉取、审查、测试、安装和有效会话原生缓存清理验证；不把其余项目标为通过，PR 保持未合并。
