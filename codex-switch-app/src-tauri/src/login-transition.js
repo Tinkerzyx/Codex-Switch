@@ -13,6 +13,8 @@
   var inertBody = null;
   var previousInert = false;
   var lastPath = "";
+  var transitionDeadline = null;
+  var transitionExpired = false;
 
   function isChatPage() {
     // Keep sign-in, callback and challenge pages available for user interaction.
@@ -22,8 +24,16 @@
   function render() {
     var root = document.documentElement;
     if (!root) return;
-    if (!isChatPage()) visible = false;
+    if (!isChatPage() || transitionExpired) visible = false;
     if (visible) {
+      if (transitionDeadline === null) {
+        transitionDeadline = setTimeout(function () {
+          transitionExpired = true;
+          visible = false;
+          confirmed = false;
+          render();
+        }, 30000);
+      }
       root.setAttribute("data-csw-login-transition", "");
       if (!style.isConnected) root.appendChild(style);
       if (!overlay.isConnected) root.appendChild(overlay);

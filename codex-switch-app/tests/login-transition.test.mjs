@@ -112,3 +112,33 @@ test("OpenAI authorization pages receive no mask or session request", () => {
   assert.equal(p.fetchCount(), 0);
   assert.equal(p.context.__cswShowLoginTransition, undefined);
 });
+
+test("confirmed login mask releases after its deadline if native OAuth never navigates", async () => {
+  const p = page();
+  await flush();
+  p.context.__cswShowLoginTransition();
+  p.timeout();
+  await flush();
+  assert.equal(p.masked(), false);
+  assert.equal(p.body.inert, false);
+});
+
+test("expired overlay cannot be rearmed by repeated native subscription probes", async () => {
+  const p = page(); await flush(); p.timeout(); await flush();
+  p.context.__cswShowLoginTransition();
+  assert.equal(p.masked(), false);
+});
+
+test("authenticated subscription probe stays ready when optional endpoints fail or stall", async () => {
+  const rust = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
+  const probe = rust.match(/fn web_subscription_probe_script[\s\S]*?r#"([\s\S]*?)"#/)[1];
+  for (const stalled of [false, true]) {
+    const ctx = { atob, fetch: async url => {
+      if (url.endsWith("/api/auth/session")) return { ok: true, json: async () => signedIn };
+      if (stalled) return new Promise(() => {});
+      throw new Error("optional endpoint unavailable");
+    } };
+    ctx.window = ctx; vm.runInNewContext(probe, ctx); await flush();
+    assert.equal(JSON.parse(ctx.__cswSubscriptionProbe).sessionReady, true);
+  }
+});
